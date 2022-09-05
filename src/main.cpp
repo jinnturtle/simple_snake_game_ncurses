@@ -40,17 +40,40 @@ struct Vec2 {
     int y;
 };
 
+struct Food final {
+    Food(int nutrition, Vec2 pos);
+
+    auto render() -> void;
+
+    int nutrition;
+    Vec2 pos;
+};
+
+Food::Food(int nutrition, Vec2 pos)
+: nutrition {nutrition}
+, pos {pos}
+{}
+
+auto Food::render() -> void
+{
+    mvaddch(this->pos.y, this->pos.x, '.');
+}
+
 class Snake final {
 public:
     Snake();
 
+    auto get_length() -> size_t;
+
+    auto grow(int ammount) -> void; // grows snake by additional ammount
     auto render() -> void;
     auto steer(Keybind key) -> void;
-    auto update() -> void;
+    auto update(Food* food) -> void;
 private:
     auto move(Vec2* pos) -> void; // move head to this position
 
     Direction direction;
+    size_t length;
     std::list<Vec2> segments;
 };
 
@@ -59,9 +82,18 @@ Snake::Snake()
 {
     this->segments.push_back(Vec2{10, 10});
     this->segments.push_back(Vec2{10, 11});
-    this->segments.push_back(Vec2{10, 12});
-    this->segments.push_back(Vec2{10, 13});
-    this->segments.push_back(Vec2{10, 14});
+
+    this->length = this->segments.size();
+}
+
+auto Snake::get_length() -> size_t
+{
+    return this->length;
+}
+
+auto Snake::grow(int ammount) -> void
+{
+    this->length += ammount;
 }
 
 auto Snake::render() -> void
@@ -100,37 +132,40 @@ auto Snake::steer(Keybind key) -> void
     }
 }
 
-auto Snake::update() -> void
+auto Snake::update(Food* food) -> void
 {
     Vec2 pos {this->segments.front()};
 
     switch (this->direction) {
         case DIR_up:
             --pos.y;
-            this->move(&pos);
+            this->segments.push_front(pos);
             break;
         case DIR_down:
             ++pos.y;
-            this->move(&pos);
+            this->segments.push_front(pos);
             break;
         case DIR_left:
             --pos.x;
-            this->move(&pos);
+            this->segments.push_front(pos);
             break;
         case DIR_right:
             ++pos.x;
-            this->move(&pos);
+            this->segments.push_front(pos);
             break;
         default:
             break;
     }
-}
 
-// moves the snake's head to this position and removes last element of tail
-auto Snake::move(Vec2* pos) -> void
-{
-    this->segments.pop_back();
-    this->segments.push_front(*pos);
+    if (pos.x == food->pos.x && pos.y == food->pos.y) {
+        this->grow(food->nutrition);
+    }
+
+    /* snake might be shorter than it should be (e.g. if ate recently)
+    * here we let it grow it it should*/
+    if (this->segments.size() >= this->length) {
+        this->segments.pop_back();
+    }
 }
 
 auto main() -> int
@@ -147,11 +182,11 @@ auto main() -> int
 
     int game_speed {2};
     Snake snake;
+    Food food(1, Vec2{15, 15});
 
     Keybind key {KEYBIND_up};
     while (key != KEYBIND_quit) {
         clear();
-        snake.render();
 
         key = static_cast<Keybind>(getch());
 
@@ -165,7 +200,10 @@ auto main() -> int
                 snake.steer(key);
         }
 
-        snake.update();
+        snake.update(&food);
+
+        food.render();
+        snake.render();
 
         refresh();
         std::this_thread::sleep_for(
