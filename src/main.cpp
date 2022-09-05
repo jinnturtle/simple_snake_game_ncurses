@@ -64,6 +64,7 @@ class Snake final {
 public:
     Snake();
 
+    auto get_alive() -> bool;
     auto get_length() -> size_t;
 
     auto grow(int ammount) -> void; // grows snake by additional ammount
@@ -73,18 +74,26 @@ public:
 private:
     auto move(Vec2* pos) -> void; // move head to this position
 
+    bool alive;
     Direction direction;
     size_t length;
     std::list<Vec2> segments;
 };
 
 Snake::Snake()
-: direction {DIR_right}
+: alive {true}
+, direction {DIR_right}
+ 
 {
     this->segments.push_back(Vec2{10, 10});
     this->segments.push_back(Vec2{10, 11});
 
     this->length = this->segments.size();
+}
+
+auto Snake::get_alive() -> bool
+{
+    return this->alive;
 }
 
 auto Snake::get_length() -> size_t
@@ -183,6 +192,7 @@ auto main() -> int
     nodelay(stdscr, true);
 
     int game_speed {2};
+    size_t game_score {0};
     Snake snake;
     Food food(0, Vec2{15, 15});
 
@@ -207,9 +217,15 @@ auto main() -> int
                 snake.steer(key);
         }
 
+        // TODO set playground boundaries (and maybe draw them on screen too)
         snake.update(&food);
-        // TODO score (prob score += length)
-        ss_buf << "length: " << snake.get_length();
+
+        // TODO add game over screen
+        if (snake.get_alive()) {
+            game_score += snake.get_length();
+        }
+
+        ss_buf << "length: " << snake.get_length() << " score: " << game_score;
         if (food.nutrition == 0) {
             food.pos.x = distr_x(rand_gen);
             food.pos.y = distr_y(rand_gen);
