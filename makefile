@@ -48,6 +48,8 @@ clean:
 
 .PHONY: ctags
 ctags:
-	ctags --fields=* --extras=* --extras-c++=* -R $(SRC_DIR)/* /usr/include/SDL2/*
+	ctags --fields=* --extras=* --extras-c++=* -R\
+		$(SRC_DIR)/*\
+		/usr/include/ncurses.h
 
 -include $(DEPS)

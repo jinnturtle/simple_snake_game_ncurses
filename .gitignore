@@ -1,3 +1,6 @@
 # compiled objects
 obj/*
 exe
+
+# generated utility files
+tags

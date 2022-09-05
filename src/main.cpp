@@ -1,5 +1,5 @@
 #include <sstream>
-#include <vector>
+#include <list>
 #include <chrono>
 #include <thread>
 
@@ -20,15 +20,22 @@ auto start_screen() -> void;
 // returns a string representing the program version, format <MAJ>.<MIN>.<FIX>
 auto ver_str() -> std::string;
 
-enum {
+enum Keybind {
     KEYBIND_up    = 'k',
     KEYBIND_down  = 'j',
-    KEYBIND_left  = 'l',
-    KEYBIND_right = 'h',
+    KEYBIND_left  = 'h',
+    KEYBIND_right = 'l',
     KEYBIND_quit  = 'q'
 };
 
-struct vec2 {
+enum Direction {
+    DIR_up = 0,
+    DIR_down,
+    DIR_left,
+    DIR_right
+};
+
+struct Vec2 {
     int x;
     int y;
 };
@@ -38,29 +45,95 @@ public:
     Snake();
 
     auto render() -> void;
+    auto steer(Keybind key) -> void;
+    auto update() -> void;
 private:
-    std::vector<vec2> segments;
+    auto move(Vec2* pos) -> void; // move head to this position
+
+    Direction direction;
+    std::list<Vec2> segments;
 };
 
 Snake::Snake()
+: direction {DIR_right}
 {
-    this->segments.push_back(vec2{10, 10});
-    this->segments.push_back(vec2{10, 11});
+    this->segments.push_back(Vec2{10, 10});
+    this->segments.push_back(Vec2{10, 11});
+    this->segments.push_back(Vec2{10, 12});
+    this->segments.push_back(Vec2{10, 13});
+    this->segments.push_back(Vec2{10, 14});
 }
 
 auto Snake::render() -> void
 {
-    for (size_t i {0}; i < this->segments.size(); ++i) {
+    for (
+        std::list<Vec2>::iterator i {this->segments.begin()};
+        i != this->segments.end();
+        ++i
+    ) {
         char graphic {'*'};
-        if (i == 0) {
+        if (i == this->segments.begin()) {
             graphic = '@';
         }
 
-        mvaddch(this->segments[i].y, this->segments[i].x, graphic);
+        mvaddch(i->y, i->x, graphic);
     }
 }
 
-auto main(int argc, char** argv) -> int
+auto Snake::steer(Keybind key) -> void
+{
+    switch (key) {
+        case KEYBIND_up:
+            this->direction = DIR_up;
+            break;
+        case KEYBIND_down:
+            this->direction = DIR_down;
+            break;
+        case KEYBIND_left:
+            this->direction = DIR_left;
+            break;
+        case KEYBIND_right:
+            this->direction = DIR_right;
+            break;
+        default:
+            break;
+    }
+}
+
+auto Snake::update() -> void
+{
+    Vec2 pos {this->segments.front()};
+
+    switch (this->direction) {
+        case DIR_up:
+            --pos.y;
+            this->move(&pos);
+            break;
+        case DIR_down:
+            ++pos.y;
+            this->move(&pos);
+            break;
+        case DIR_left:
+            --pos.x;
+            this->move(&pos);
+            break;
+        case DIR_right:
+            ++pos.x;
+            this->move(&pos);
+            break;
+        default:
+            break;
+    }
+}
+
+// moves the snake's head to this position and removes last element of tail
+auto Snake::move(Vec2* pos) -> void
+{
+    this->segments.pop_back();
+    this->segments.push_front(*pos);
+}
+
+auto main() -> int
 {
     init_ncurses();
 
@@ -75,18 +148,26 @@ auto main(int argc, char** argv) -> int
     int game_speed {2};
     Snake snake;
 
-    char ch {0};
-    while (ch != KEYBIND_quit) {
+    Keybind key {KEYBIND_up};
+    while (key != KEYBIND_quit) {
         clear();
         snake.render();
 
-        ch = getch();
+        key = static_cast<Keybind>(getch());
 
-        switch (ch) {
+        switch (key) {
             case KEYBIND_quit:
                 continue;
+            case KEYBIND_up:
+            case KEYBIND_down:
+            case KEYBIND_left:
+            case KEYBIND_right:
+                snake.steer(key);
         }
 
+        snake.update();
+
+        refresh();
         std::this_thread::sleep_for(
             std::chrono::duration<double, std::milli>(1000 / game_speed)
         );
