@@ -2,6 +2,7 @@
 #include <list>
 #include <chrono>
 #include <thread>
+#include <random>
 
 #include <ncurses.h>
 
@@ -159,11 +160,12 @@ auto Snake::update(Food* food) -> void
 
     if (pos.x == food->pos.x && pos.y == food->pos.y) {
         this->grow(food->nutrition);
+        food->nutrition = 0;
     }
 
     /* snake might be shorter than it should be (e.g. if ate recently)
     * here we let it grow it it should*/
-    if (this->segments.size() >= this->length) {
+    if (this->segments.size() > this->length) {
         this->segments.pop_back();
     }
 }
@@ -182,7 +184,12 @@ auto main() -> int
 
     int game_speed {2};
     Snake snake;
-    Food food(1, Vec2{15, 15});
+    Food food(0, Vec2{15, 15});
+
+    std::random_device rd;
+    std::mt19937 rand_gen(rd());
+    std::uniform_int_distribution<size_t> distr_x(1, 20);
+    std::uniform_int_distribution<size_t> distr_y(1, 20);
 
     Keybind key {KEYBIND_up};
     while (key != KEYBIND_quit) {
@@ -201,11 +208,23 @@ auto main() -> int
         }
 
         snake.update(&food);
+        // TODO score (prob score += length)
+        ss_buf << "length: " << snake.get_length();
+        if (food.nutrition == 0) {
+            food.pos.x = distr_x(rand_gen);
+            food.pos.y = distr_y(rand_gen);
+            food.nutrition = 1;
+        }
 
         food.render();
         snake.render();
+        mvaddstr(0, 0, ss_buf.str().c_str());
 
+        ss_buf.str(std::string());
         refresh();
+
+        // TODO gradually increase game speed
+        // TODO account for things taking up frame time
         std::this_thread::sleep_for(
             std::chrono::duration<double, std::milli>(1000 / game_speed)
         );
