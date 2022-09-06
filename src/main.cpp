@@ -27,6 +27,7 @@ auto start_screen() -> void;
 auto ver_str() -> std::string;
 
 enum Keybind {
+    KEYBIND_null  = '\0',
     KEYBIND_up    = 'k',
     KEYBIND_down  = 'j',
     KEYBIND_left  = 'h',
@@ -78,10 +79,12 @@ public:
 
     size_t score;
 
+    auto get_board() -> Square;
+
     auto check_food_collision(Vec2* pos) -> bool; // returns true on collision
     auto check_out_of_bounds(Vec2* pos) -> bool; // returns true if pos o.o.b.
     auto eat_food() -> int; // returns food nutrition and consumes food
-
+                            //
     auto render() -> void;
     auto update() -> void;
 private:
@@ -99,14 +102,19 @@ Game_data::Game_data(Square board)
 , food {0, Vec2{0, 0}}
 {
     int min_x = this->board.x;
-    int max_x = this->board.x + this->board.w;
+    int max_x = this->board.x + this->board.w - 1;
     int min_y = this->board.y;
-    int max_y = this->board.y + this->board.h;
+    int max_y = this->board.y + this->board.h - 1;
 
     std::random_device rd;
     this->rand_gen = std::mt19937(rd());
     this->distr_x = std::uniform_int_distribution<size_t>(min_x, max_x);
     this->distr_y = std::uniform_int_distribution<size_t>(min_y, max_y);
+}
+
+auto Game_data::get_board() -> Square
+{
+    return this->board;
 }
 
 auto Game_data::check_food_collision(Vec2* pos) -> bool
@@ -162,7 +170,7 @@ auto Game_data::update() -> void
 
 class Snake final {
 public:
-    Snake();
+    Snake(Game_data* game);
 
     auto get_alive() -> bool;
     auto get_length() -> size_t;
@@ -173,7 +181,7 @@ public:
     auto update(Game_data* game) -> void;
 
 private:
-    auto move(Vec2* pos) -> void; // move head to this position
+    auto check_self_collision(Vec2* pos) -> bool; // true if collided with self
 
     bool alive;
     Direction direction;
@@ -181,13 +189,15 @@ private:
     std::list<Vec2> segments;
 };
 
-Snake::Snake()
+Snake::Snake(Game_data* game)
 : alive {true}
-, direction {DIR_right}
+, direction {DIR_up}
  
 {
-    this->segments.push_back(Vec2{10, 10});
-    this->segments.push_back(Vec2{10, 11});
+    int start_x = game->get_board().x + game->get_board().w / 2;
+    int start_y = game->get_board().y + game->get_board().h - 2;
+
+    this->segments.push_back(Vec2{start_x, start_y});
 
     this->length = this->segments.size();
 }
@@ -227,16 +237,16 @@ auto Snake::steer(Keybind key) -> void
 {
     switch (key) {
         case KEYBIND_up:
-            this->direction = DIR_up;
+            if (this->direction != DIR_down) { this->direction = DIR_up; }
             break;
         case KEYBIND_down:
-            this->direction = DIR_down;
+            if (this->direction != DIR_up) { this->direction = DIR_down; }
             break;
         case KEYBIND_left:
-            this->direction = DIR_left;
+            if (this->direction != DIR_right) { this->direction = DIR_left; }
             break;
         case KEYBIND_right:
-            this->direction = DIR_right;
+            if (this->direction != DIR_left) { this->direction = DIR_right; }
             break;
         default:
             break;
@@ -268,6 +278,11 @@ auto Snake::update(Game_data* game) -> void
             break;
     }
 
+    if (this->check_self_collision(&pos)) {
+        this->alive = false;
+        return;
+    }
+
     if (game->check_out_of_bounds(&pos)) {
         this->alive = false;
         return;
@@ -282,6 +297,24 @@ auto Snake::update(Game_data* game) -> void
     if (this->segments.size() > this->length) {
         this->segments.pop_back();
     }
+}
+
+auto Snake::check_self_collision(Vec2* pos) -> bool
+{
+    for (
+        std::list<Vec2>::iterator i {this->segments.begin()};
+        i != this->segments.end();
+        ++i
+    ) {
+        // skipping the head, can't bite your own head
+        if (i == this->segments.begin()) { continue; }
+
+        if (pos->x == i->x && pos->y == i->y) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 auto main() -> int
@@ -305,9 +338,9 @@ auto main() -> int
     int game_speed {2};
     size_t game_score {0};
     Game_data game(Square{1, 2, 40, 20});
-    Snake snake;
+    Snake snake(&game);
 
-    Keybind key {KEYBIND_up};
+    Keybind key {KEYBIND_null};
     while (!quit && snake.get_alive()) {
         clear();
 
@@ -322,6 +355,8 @@ auto main() -> int
             case KEYBIND_left:
             case KEYBIND_right:
                 snake.steer(key);
+            default:
+                break;
         }
 
         // TODO set playground boundaries (and maybe draw them on screen too)
