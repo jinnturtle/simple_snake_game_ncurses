@@ -1,7 +1,10 @@
 NAME = exe
 
 CXX_SRC =\
-	main.cpp
+	main.cpp\
+	Food.cpp\
+	Game_data.cpp\
+	Snake.cpp
 
 C_SRC =\
 	timestamp.c
