@@ -1,0 +1,5 @@
+= Snake
+
+Wanted to write some code on the evening of 2022-09-05, and the good old Snake
+came to mind. Got a bit carried away in terms of features and ended up with
+a playable game, with score and all :D
