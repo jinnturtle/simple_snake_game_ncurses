@@ -13,9 +13,14 @@
 #define PROG_V_MIN 1
 #define PROG_V_FIX 0
 
+#define BOARD_W 40
+#define BOARD_H 20
+
 auto deinit_ncurses() -> void;
 auto init_ncurses() -> void;
 
+// checks required hardware parameters, returns non 0 if requirements not met
+auto check_hardware_req() -> int;
 // displays a welcome message and basic help info
 auto start_screen() -> void;
 // returns a string representing the program version, format <MAJ>.<MIN>.<FIX>
@@ -34,6 +39,13 @@ enum Direction {
     DIR_down,
     DIR_left,
     DIR_right
+};
+
+struct Square {
+    int x;
+    int y;
+    int w;
+    int h;
 };
 
 struct Vec2 {
@@ -60,6 +72,94 @@ auto Food::render() -> void
     mvaddch(this->pos.y, this->pos.x, '.');
 }
 
+class Game_data final {
+public:
+    Game_data(Square board);
+
+    size_t score;
+
+    auto check_food_collision(Vec2* pos) -> bool; // returns true on collision
+    auto check_out_of_bounds(Vec2* pos) -> bool; // returns true if pos o.o.b.
+    auto eat_food() -> int; // returns food nutrition and consumes food
+
+    auto render() -> void;
+    auto update() -> void;
+private:
+    Square board;
+    Food food;
+
+    std::mt19937 rand_gen;
+    std::uniform_int_distribution<size_t> distr_x;
+    std::uniform_int_distribution<size_t> distr_y;
+};
+
+Game_data::Game_data(Square board)
+: score {0}
+, board {board}
+, food {0, Vec2{0, 0}}
+{
+    int min_x = this->board.x;
+    int max_x = this->board.x + this->board.w;
+    int min_y = this->board.y;
+    int max_y = this->board.y + this->board.h;
+
+    std::random_device rd;
+    this->rand_gen = std::mt19937(rd());
+    this->distr_x = std::uniform_int_distribution<size_t>(min_x, max_x);
+    this->distr_y = std::uniform_int_distribution<size_t>(min_y, max_y);
+}
+
+auto Game_data::check_food_collision(Vec2* pos) -> bool
+{
+    if (this->food.pos.x == pos->x && this->food.pos.y == pos->y) {
+        return true;
+    }
+
+    return false;
+}
+
+auto Game_data::check_out_of_bounds(Vec2* pos) -> bool
+{
+    if (pos->x < this->board.x || pos->x > this->board.x + this->board.w-1 ||
+        pos->y < this->board.y || pos->y > this->board.y + this->board.h-1
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+auto Game_data::eat_food() -> int
+{
+    int nutrition = this->food.nutrition;
+    this->food.nutrition = 0;
+    return nutrition;
+}
+
+auto Game_data::render() -> void
+{
+    for (int x {this->board.x - 1}; x <= this->board.x + this->board.w; ++x) {
+        mvaddch(this->board.y - 1            , x, '#');
+        mvaddch(this->board.y + this->board.h, x, '#');
+    }
+
+    for (int y {this->board.y - 1}; y <= this->board.y + this->board.h; ++y) {
+        mvaddch(y, this->board.x - 1            , '#');
+        mvaddch(y, this->board.x + this->board.w, '#');
+    }
+
+    this->food.render();
+}
+
+auto Game_data::update() -> void
+{
+    if (this->food.nutrition == 0) {
+        this->food.pos.x = distr_x(rand_gen);
+        this->food.pos.y = distr_y(rand_gen);
+        this->food.nutrition = 1;
+    }
+}
+
 class Snake final {
 public:
     Snake();
@@ -70,7 +170,8 @@ public:
     auto grow(int ammount) -> void; // grows snake by additional ammount
     auto render() -> void;
     auto steer(Keybind key) -> void;
-    auto update(Food* food) -> void;
+    auto update(Game_data* game) -> void;
+
 private:
     auto move(Vec2* pos) -> void; // move head to this position
 
@@ -142,7 +243,7 @@ auto Snake::steer(Keybind key) -> void
     }
 }
 
-auto Snake::update(Food* food) -> void
+auto Snake::update(Game_data* game) -> void
 {
     Vec2 pos {this->segments.front()};
 
@@ -167,9 +268,13 @@ auto Snake::update(Food* food) -> void
             break;
     }
 
-    if (pos.x == food->pos.x && pos.y == food->pos.y) {
-        this->grow(food->nutrition);
-        food->nutrition = 0;
+    if (game->check_out_of_bounds(&pos)) {
+        this->alive = false;
+        return;
+    }
+
+    if (game->check_food_collision(&pos)) {
+        this->grow(game->eat_food());
     }
 
     /* snake might be shorter than it should be (e.g. if ate recently)
@@ -183,6 +288,11 @@ auto main() -> int
 {
     init_ncurses();
 
+    if (check_hardware_req()) {
+        deinit_ncurses();
+        logs::err("larger terminal is needed to run program");
+        return 1;
+    }
     start_screen();
 
     std::stringstream ss_buf;
@@ -191,24 +301,21 @@ auto main() -> int
      * game speed */
     nodelay(stdscr, true);
 
+    bool quit {false};
     int game_speed {2};
     size_t game_score {0};
+    Game_data game(Square{1, 2, 40, 20});
     Snake snake;
-    Food food(0, Vec2{15, 15});
-
-    std::random_device rd;
-    std::mt19937 rand_gen(rd());
-    std::uniform_int_distribution<size_t> distr_x(1, 20);
-    std::uniform_int_distribution<size_t> distr_y(1, 20);
 
     Keybind key {KEYBIND_up};
-    while (key != KEYBIND_quit) {
+    while (!quit && snake.get_alive()) {
         clear();
 
         key = static_cast<Keybind>(getch());
 
         switch (key) {
             case KEYBIND_quit:
+                quit = true;
                 continue;
             case KEYBIND_up:
             case KEYBIND_down:
@@ -218,7 +325,8 @@ auto main() -> int
         }
 
         // TODO set playground boundaries (and maybe draw them on screen too)
-        snake.update(&food);
+        game.update();
+        snake.update(&game);
 
         // TODO add game over screen
         if (snake.get_alive()) {
@@ -226,13 +334,8 @@ auto main() -> int
         }
 
         ss_buf << "length: " << snake.get_length() << " score: " << game_score;
-        if (food.nutrition == 0) {
-            food.pos.x = distr_x(rand_gen);
-            food.pos.y = distr_y(rand_gen);
-            food.nutrition = 1;
-        }
 
-        food.render();
+        game.render();
         snake.render();
         mvaddstr(0, 0, ss_buf.str().c_str());
 
@@ -258,13 +361,35 @@ auto deinit_ncurses() -> void
 
 auto init_ncurses() -> void
 {
-    DBG(8, "init ncurses");
-
     initscr();
     cbreak();
     noecho();
     intrflush(stdscr, FALSE);
     keypad(stdscr, TRUE);
+}
+
+auto check_hardware_req() -> int
+{
+    int max_x, max_y;
+    getmaxyx(stdscr, max_y, max_x);
+
+    int need_max_x = BOARD_W + 2; // +2 for boarders
+    int need_max_y = BOARD_H + 3; // +2 for boarders, +1 game stats line
+    if (max_x < need_max_x || max_y < need_max_y) {
+        std::stringstream ss_buf;
+        ss_buf
+        << "need larger terminal!\n"
+        << "min x: " << need_max_x << " (current: " << max_x << ")\n"
+        << "min y: " << need_max_y << " (current: " << max_y << ")\n"
+        << "press any key...";
+
+        mvaddstr(0, 0, ss_buf.str().c_str());
+        getch();
+
+        return 1;
+    }
+
+    return 0;
 }
 
 auto start_screen() -> void
