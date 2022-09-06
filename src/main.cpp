@@ -138,6 +138,9 @@ auto check_hardware_req() -> int
 
 auto game_over(Game_data* game) -> void
 {
+    /* TODO implement a score board that can also be saved in the filesystem
+     * and display it here
+     */
     nodelay(stdscr, false);
     std::stringstream ss_buf;
 
